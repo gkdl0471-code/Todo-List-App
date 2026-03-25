@@ -1,25 +1,16 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import './App.css'
 
+const API_BASE_URL = "http://localhost:3001";
+
 function App() {
-  const [isLoading, data] = useFetch
-  ("http://localhost:3001/todo");
   const [todo, setTodo] = useState([])
-  const [currentTodo, setCurrentTodo] = useState(null)
   const [time, setTime] = useState(0)
+  const handleTodoFetchSuccess = useCallback((res) => {
+    setTodo(res);
+  }, []);
 
-    useEffect(() => {
-      if (currentTodo)
-      fetch(`http://localhost:3001/todo/${currentTodo}`, {
-        method: "PATCH",
-        body: JSON.stringify({time: todo.find((el) => el.id === currentTodo).time + 1}),
-      });
-    },[time])
-
-    useEffect(() => {
-      if (data) setTodo(data);
-    }, [isLoading]);
-
+  useFetch(`${API_BASE_URL}/todo`, handleTodoFetchSuccess);
 
 return (
   <>
@@ -29,12 +20,12 @@ return (
     <br />
     <TodoInput setTodo = {setTodo}/>
     <div className='zzz'></div>
-    <TodoList todo = {todo} setTodo={setTodo} setCurrentTodo={setCurrentTodo} />
+    <TodoList todo = {todo} setTodo={setTodo} />
   </>
   )
 }
 
-const useFetch = (url) => {
+const useFetch = (url, onSuccess) => {
   const [isLoading, setIsLoding] = useState(true)
   const [data, setData] =useState(null);
 
@@ -43,9 +34,10 @@ const useFetch = (url) => {
     .then((res) => res.json())
     .then((res) => {
       setData(res);
+      if (onSuccess) onSuccess(res);
       setIsLoding(false);
     });
-  }, [url]);
+  }, [url, onSuccess]);
   return [isLoading, data]
 }
 
@@ -123,15 +115,32 @@ const StopWatch = ({time, setTime}) => {
 const TodoInput = ({setTodo}) => {
   const inputRef = useRef(null)
   const addTodo = () => {
+    const content = inputRef.current.value.trim();
+    if (!content) return;
+
     const newTodo = {
-      content: inputRef.current.value,
+      content,
       time: 0,
     };
-    fetch("http://localhost:3001/todo", {
+
+    fetch(`${API_BASE_URL}/todo`, {
       method: "POST", 
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(newTodo),
-    }).then(res => res.json())
-      .then(res => setTodo(prev => [...prev, res]));
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Todo 추가 실패");
+        return res.json();
+      })
+      .then((res) => {
+        setTodo((prev) => [...prev, res]);
+        inputRef.current.value = "";
+      })
+      .catch((error) => {
+        console.error(error);
+      });
   };
 
   return (
@@ -142,31 +151,30 @@ const TodoInput = ({setTodo}) => {
   )
 }
 
-const TodoList = ({todo, setTodo, setCurrentTodo}) => {
+const TodoList = ({todo, setTodo}) => {
   return (
     <>
       <ul>
         {todo.map((el) => 
-          <Todo key={el.id} todo={el} setTodo={setTodo} setCurrentTodo={setCurrentTodo}/>
+          <Todo key={el.id} todo={el} setTodo={setTodo}/>
         )}
       </ul>
     </>
   )
 }
 
-const Todo = ({todo, setTodo, setCurrentTodo}) => {
+const Todo = ({todo, setTodo}) => {
   return (
     <>
       <li>
         {todo.content}
           <button
             onClick={() => {
-              fetch(`http://localhost:3001/todo/${todo.id}`, {
+              fetch(`${API_BASE_URL}/todo/${todo.id}`, {
                 method: "DELETE", 
               }).then((res) => {
                 if (res.ok) {
-                  setTodo((prev) => prev.filter
-                  ((el) => el.id !== todo.id));
+                  setTodo((prev) => prev.filter((el) => el.id !== todo.id));
                 }
               });
             }}
